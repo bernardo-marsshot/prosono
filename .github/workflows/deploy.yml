@@ -1,0 +1,155 @@
+name: Deploy to Azure Container Apps
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  REGISTRY: acrmarsshotprosonoprod.azurecr.io
+  IMAGE_NAME: prosono-app
+  PROJECT_NAME: marsshot-prosono-mvp
+  ENVIRONMENT: prod
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          allow-no-subscriptions: true
+
+      - name: Get infrastructure outputs
+        id: infra
+        run: |
+          # Get Terraform outputs for deployment info
+          az extension add --name containerapp
+          
+          # Fetch infrastructure details from resource group
+          RESOURCE_GROUP="rg-${{ env.PROJECT_NAME }}-${{ env.ENVIRONMENT }}"
+          
+          # Get Container Registry details
+          ACR_NAME=$(az acr list --resource-group $RESOURCE_GROUP --query "[0].name" -o tsv)
+          ACR_LOGIN_SERVER=$(az acr show --name $ACR_NAME --resource-group $RESOURCE_GROUP --query "loginServer" -o tsv)
+          
+          # Get Container App Environment
+          CAE_ID=$(az containerapp env list --resource-group $RESOURCE_GROUP --query "[0].id" -o tsv)
+          
+          # Get database connection details
+          PSQL_SERVER=$(az postgres flexible-server list --resource-group $RESOURCE_GROUP --query "[0].fullyQualifiedDomainName" -o tsv)
+          PSQL_ADMIN=$(az postgres flexible-server list --resource-group $RESOURCE_GROUP --query "[0].administratorLogin" -o tsv)
+          
+          echo "acr-name=$ACR_NAME" >> $GITHUB_OUTPUT
+          echo "acr-login-server=$ACR_LOGIN_SERVER" >> $GITHUB_OUTPUT
+          echo "container-app-env-id=$CAE_ID" >> $GITHUB_OUTPUT
+          echo "resource-group=$RESOURCE_GROUP" >> $GITHUB_OUTPUT
+          echo "database-host=$PSQL_SERVER" >> $GITHUB_OUTPUT
+          echo "database-username=$PSQL_ADMIN" >> $GITHUB_OUTPUT
+
+      - name: Login to Azure Container Registry
+        run: |
+          az acr login --name ${{ steps.infra.outputs.acr-name }}
+
+      - name: Build and push Docker image
+        run: |
+          # Build the image
+          docker build -t ${{ steps.infra.outputs.acr-login-server }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+          docker build -t ${{ steps.infra.outputs.acr-login-server }}/${{ env.IMAGE_NAME }}:latest .
+          
+          # Push the images
+          docker push ${{ steps.infra.outputs.acr-login-server }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ steps.infra.outputs.acr-login-server }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Get secrets from Azure Key Vault or generate
+        id: secrets
+        run: |
+          # Try to get existing secrets, or generate new ones if they don't exist
+          RESOURCE_GROUP="${{ steps.infra.outputs.resource-group }}"
+          
+          # Check if we have stored secrets in a key vault or generate them
+          # For this example, we'll generate a JWT secret
+          JWT_SECRET=$(openssl rand -base64 32)
+          
+          # Get database password from Azure (this would typically be stored securely)
+          # For now, we'll use a placeholder - in production, this should be retrieved from Key Vault
+          DATABASE_PASSWORD="$(az postgres flexible-server list --resource-group $RESOURCE_GROUP --query "[0].administratorLogin" -o tsv)_password"
+          
+          echo "jwt-secret=$JWT_SECRET" >> $GITHUB_OUTPUT
+          echo "database-password=$DATABASE_PASSWORD" >> $GITHUB_OUTPUT
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          # Check if container app already exists
+          APP_EXISTS=$(az containerapp list --resource-group ${{ steps.infra.outputs.resource-group }} --query "[?name=='prosono-app']" -o tsv)
+          
+          if [ -z "$APP_EXISTS" ]; then
+            # Create new container app
+            az containerapp create \
+              --name prosono-app \
+              --resource-group ${{ steps.infra.outputs.resource-group }} \
+              --environment ${{ steps.infra.outputs.container-app-env-id }} \
+              --image ${{ steps.infra.outputs.acr-login-server }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+              --target-port 8000 \
+              --ingress external \
+              --min-replicas 1 \
+              --max-replicas 10 \
+              --cpu 1.0 \
+              --memory 2.0Gi \
+              --registry-server ${{ steps.infra.outputs.acr-login-server }} \
+              --env-vars \
+                ENVIRONMENT=production \
+                REQUIRED_DAILY_SURVEYS=7 \
+                DATABASE_URL="postgresql://${{ steps.infra.outputs.database-username }}:${{ steps.secrets.outputs.database-password }}@${{ steps.infra.outputs.database-host }}:5432/prosono?sslmode=require" \
+                JWT_SECRET_KEY="${{ steps.secrets.outputs.jwt-secret }}" \
+                JWT_ALGORITHM=HS256
+          else
+            # Update existing container app
+            az containerapp update \
+              --name prosono-app \
+              --resource-group ${{ steps.infra.outputs.resource-group }} \
+              --image ${{ steps.infra.outputs.acr-login-server }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          fi
+
+      - name: Run database migrations
+        run: |
+          # Get the container app URL for running migrations
+          APP_URL=$(az containerapp show --name prosono-app --resource-group ${{ steps.infra.outputs.resource-group }} --query "properties.configuration.ingress.fqdn" -o tsv)
+          
+          # Note: In a production setup, you might want to run migrations via a separate job
+          # or exec into the container. For now, we'll assume the app handles migrations on startup
+          echo "Application deployed at: https://$APP_URL"
+          echo "Database migrations should run automatically on container startup"
+
+      - name: Health check
+        run: |
+          APP_URL=$(az containerapp show --name prosono-app --resource-group ${{ steps.infra.outputs.resource-group }} --query "properties.configuration.ingress.fqdn" -o tsv)
+          
+          # Wait for the app to be ready
+          echo "Waiting for application to be ready..."
+          sleep 30
+          
+          # Health check
+          for i in {1..10}; do
+            if curl -f "https://$APP_URL/health" || curl -f "https://$APP_URL/"; then
+              echo "✅ Application is healthy"
+              exit 0
+            fi
+            echo "⏳ Waiting for application... (attempt $i/10)"
+            sleep 10
+          done
+          
+          echo "❌ Health check failed"
+          exit 1

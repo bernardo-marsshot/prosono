@@ -1,0 +1,52 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+CLAUDE.md
+backend/README.md
+backend/CLAUDE.md
+frontend/CLAUDE.md
+
+# Node modules and build artifacts
+frontend/node_modules
+frontend/dist
+frontend/.vite
+
+# Python cache and build artifacts
+backend/__pycache__
+backend/.pytest_cache
+backend/*.pyc
+backend/*.pyo
+backend/*.pyd
+backend/.Python
+
+# Development files
+backend/.venv
+backend/logs/*
+backend/data/*
+!backend/data/.gitkeep
+!backend/data/app.db
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Temporary files
+*.tmp
+*.temp

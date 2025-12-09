@@ -1,0 +1,37 @@
+# fly.toml app configuration file generated for prosono on 2025-06-26T21:22:41+01:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'prosono'
+primary_region = 'fra'
+
+[build]
+dockerfile = "./Dockerfile"
+
+[build.args]
+VITE_API_URL = "https://prosono.fly.dev"
+
+[deploy]
+release_command = "python -m alembic upgrade head"
+
+[http_service]
+internal_port = 8000
+force_https = true
+auto_stop_machines = 'stop'
+auto_start_machines = true
+min_machines_running = 0
+processes = ['app']
+
+[[http_service.checks]]
+grace_period = "5m"
+interval = "5m"
+method = "GET"
+timeout = "5s"
+path = "/health"
+
+
+[[vm]]
+memory = '1gb'
+cpu_kind = 'shared'
+cpus = 1

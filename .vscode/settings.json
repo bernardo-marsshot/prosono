@@ -1,0 +1,4 @@
+{
+  "python.defaultInterpreterPath": "./backend/.venv/bin/python",
+  "biome.lsp.bin": "./frontend/node_modules/@biomejs/biome/bin/biome"
+}
