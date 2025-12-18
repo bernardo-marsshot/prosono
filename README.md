@@ -5,6 +5,7 @@ ProSono is a sleep education web application designed for students aged 15-18. T
 ## Project Overview
 
 ProSono is a fullstack web application that helps students track and improve their sleep habits through:
+
 - **Sleep Assessments**: Knowledge-based surveys to evaluate sleep understanding
 - **Daily Sleep Tracking**: Track sleep duration, quality, and patterns over time
 - **Sleep Surveys**: Various questionnaires including Cleveland surveys and attitude assessments
@@ -13,6 +14,7 @@ ProSono is a fullstack web application that helps students track and improve the
 ## Technology Stack
 
 ### Frontend
+
 - **React 19** with TypeScript
 - **Vite** for build tooling
 - **Tailwind CSS** for styling
@@ -20,6 +22,7 @@ ProSono is a fullstack web application that helps students track and improve the
 - **Biome** for linting and formatting
 
 ### Backend
+
 - **FastAPI** (Python 3.12+)
 - **SQLAlchemy** for ORM
 - **Alembic** for database migrations
@@ -100,9 +103,7 @@ docker run -d --name postgres-prosono \
 
 Ensure PostgreSQL is installed and running, then create a database:
 
-```bash
 createdb prosono
-```
 
 ### 3. Backend Setup
 
@@ -113,11 +114,11 @@ cd backend
 uv sync
 
 # Set up environment variables
-export DATABASE_URL="postgresql://postgres:password@localhost:5432/prosono"
-export JWT_SECRET_KEY="your-secret-key-change-this-in-development"
-export JWT_ALGORITHM="HS256"
-export ENVIRONMENT="development"
-export REQUIRED_DAILY_SURVEYS="7"
+set DATABASE_URL="postgresql://postgres:password@localhost:5432/prosono"
+set JWT_SECRET_KEY="your-secret-key-change-this-in-development"
+set JWT_ALGORITHM="HS256"
+set ENVIRONMENT="development"
+set REQUIRED_DAILY_SURVEYS="7"
 
 # Run database migrations
 uv run alembic upgrade head
@@ -129,6 +130,7 @@ uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
 The backend API will be available at `http://localhost:8000`
 
 **API Documentation**: Once the server is running, visit:
+
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 
@@ -185,24 +187,24 @@ VITE_API_URL=http://localhost:8000
 ### Development Mode
 
 1. **Start the database** (if using Docker):
+
    ```bash
    docker start postgres-prosono
    ```
-
 2. **Start the backend** (in one terminal):
+
    ```bash
    cd backend
    export DATABASE_URL="postgresql://postgres:password@localhost:5432/prosono"
    export JWT_SECRET_KEY="dev-secret-key"
    uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
-
 3. **Start the frontend** (in another terminal):
+
    ```bash
    cd frontend
    npm run dev
    ```
-
 4. **Open your browser** and navigate to `http://localhost:3000`
 
 ## Development Commands
@@ -288,11 +290,8 @@ uv run alembic downgrade -1  # Rollback one migration
 ## Testing the Setup
 
 1. **Backend Health Check**: Visit `http://localhost:8000/health` - should return `{"status": "healthy"}`
-
 2. **API Documentation**: Visit `http://localhost:8000/docs` to see the interactive API documentation
-
 3. **Frontend**: Visit `http://localhost:3000` - you should see the landing page
-
 4. **Register a User**: Use the registration form to create a test account
 
 ## Common Issues
